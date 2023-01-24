@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Top10 Stats</title>
+    <style>
+        table {
+        border-collapse: collapse;
+        width: 100%;
+        }
+
+        table, th, td {
+        border: 1px solid;
+        text-align: center;
+        padding: 8px;
+        }
+
+        tr:nth-child(even){background-color: #f2f2f2}
+
+        th {
+        background-color: #664102;
+        color: white;
+        }
+
+        td {
+        height: 30px;
+        vertical-align: center;
+        }
+        {{/* tr:hover {background-color: yellow;} */}}
+    </style>
+</head>
+<body>
+    <div style="text-align: center;"><h2>Ftag Europe Top10</h2></div>
+    <table>
+        <tr>
+            <th>Position</th>
+            <th>Name</th>
+            <th>Score</th>
+        </tr>
+        {{range .Top10}}
+            <tr>
+                <td>{{.Position}}</td>
+                <td>{{.Stats.Name}}</td>
+                <td>{{.Stats.Score}}</td>
+            </tr>
+        {{end}}
+    </table>
+</body>
+</html>
