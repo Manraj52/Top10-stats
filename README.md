@@ -30,7 +30,7 @@ or
 
     B) Install
     1. Download & Install Go
-    2. open rcp port 9000
+    2. open tcp port 9000
     3. Run this = go run main.go &
     4. Visit ip:9000
 
