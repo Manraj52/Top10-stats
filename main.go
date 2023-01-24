@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 	"text/template"
 
@@ -143,14 +142,14 @@ func getStats() (stats []place, err error) {
 		stat.Stats.Name = strings.TrimSpace(s[strings.Index(s, `>`)+1 : strings.Index(s, `</a>`)])
 		stat.Stats.Score = strings.TrimSpace(s[strings.Index(s, `scrollable_on_c03">`)+19:])
 
-		score := stat.Stats.Score
-		if strings.Contains(score, "k") {
-			parsedNumber, err := strconv.ParseFloat(score[:len(score)-1], 64)
-			if err != nil {
-				return nil, err
-			}
-			stat.Stats.Score = strconv.Itoa(int(parsedNumber * 1000))
-		}
+		// score := stat.Stats.Score
+		// if strings.Contains(score, "k") {
+		// 	parsedNumber, err := strconv.ParseFloat(score[:len(score)-1], 64)
+		// 	if err != nil {
+		// 		return nil, err
+		// 	}
+		// 	stat.Stats.Score = strconv.Itoa(int(parsedNumber * 1000))
+		// }
 
 		stats = append(stats, stat)
 	}
