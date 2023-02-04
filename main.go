@@ -1,158 +1,113 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"log"
-	"strings"
-	"text/template"
-
+	"github.com/joho/godotenv"
 	"github.com/valyala/fasthttp"
+	"log"
+	"main/common"
+	"main/stats"
+	"net"
+	"os"
+	"strings"
+	"time"
 )
 
-// Add your server ip and port here ip:port
-// Add server Name (optional) in short with no spaces
-// your server will goes to = ip:9000
-// and api goes to = ip:9000/api/
-// Add listen port (optional)
-var gameTrackerServerIp = "185.107.96.152:28960"
-var serverName = "" //optional
-var listenPort = "" //optional
+type stdLogger struct{}
 
-type stats struct {
-	//UserProfile string
-	Name  string `json:"name"`
-	Score string `json:"score"`
+func (l *stdLogger) Printf(format string, args ...interface{}) {
+	log.Printf(format, args...)
 }
 
-type place struct {
-	Stats    stats `json:"stats"`
-	Position int   `json:"position"`
+func (l *stdLogger) Println(args ...interface{}) {
+	log.Println(args...)
+}
+
+func (l *stdLogger) Print(args ...interface{}) {
+	log.Print(args...)
+}
+
+func errorHandler(ctx *fasthttp.RequestCtx, err error) {
+	ctx.Error("Something went wrong", fasthttp.StatusInternalServerError)
+	log.Println(err)
+}
+
+func headerReceived(header *fasthttp.RequestHeader) fasthttp.RequestConfig {
+	log.Println("Request received for", string(header.RequestURI()))
+
+	return fasthttp.RequestConfig{
+		ReadTimeout:        time.Second * 1,
+		WriteTimeout:       time.Second * 1,
+		MaxRequestBodySize: 1024,
+	}
+}
+
+func continueHandler(header *fasthttp.RequestHeader) bool {
+	log.Println("Received 100-continue request", header)
+	fasthttp.StatusMessage(fasthttp.StatusContinue)
+	return true
+}
+
+func connState(_ net.Conn, state fasthttp.ConnState) {
+	fmt.Println("Connection state changed to ", state.String())
 }
 
 func main() {
 	fmt.Printf("Server is Working\n\n")
 
-	server := &fasthttp.Server{
-		Handler: baseHandler,
+	logger := &stdLogger{}
+
+	environment := ""
+	if len(os.Args) < 2 {
+		log.Println("missing application environment method Usage: go run server.go {prod} ")
+		os.Exit(1)
+	} else {
+		environment = os.Args[1]
 	}
 
+	if environment == "prod" {
+		err := godotenv.Load(".prod-env")
+		if err != nil {
+			log.Println("failed to load .prod-env file, " + err.Error())
+		}
+	} else {
+		logger.Println("Environment '" + environment + "' not available.\nUsage: go run server.go {prod} ")
+		os.Exit(1)
+	}
+
+	server := &fasthttp.Server{
+		Handler:               stats.BaseHandler,
+		ErrorHandler:          errorHandler,
+		HeaderReceived:        headerReceived,
+		ContinueHandler:       continueHandler,
+		Name:                  "ICS",
+		Concurrency:           20,
+		ReadBufferSize:        1024,
+		WriteBufferSize:       128,
+		ReadTimeout:           5 * time.Second,
+		WriteTimeout:          5 * time.Second,
+		IdleTimeout:           5 * time.Second,
+		MaxConnsPerIP:         2,
+		TCPKeepalivePeriod:    5 * time.Second,
+		MaxRequestBodySize:    1 << 5, // !5 = 20
+		DisableKeepalive:      true,
+		ReduceMemoryUsage:     true,
+		GetOnly:               true,
+		SecureErrorLogMessage: true,
+		//ConnState:             connState,
+		Logger: logger,
+	}
+
+	listenPort := common.GetListenPort()
 	port := ":"
 	if strings.TrimSpace(listenPort) != "" {
-		port += listenPort
+		port += strings.TrimSpace(listenPort)
 	} else {
-		port += "9000"
+		port += "80"
 	}
 
 	if err := server.ListenAndServe(port); err != nil {
-		log.Println("ListenAndServe:", err)
+		logger.Println("ListenAndServe:", err)
 		return
 	}
-}
-
-func baseHandler(ctx *fasthttp.RequestCtx) {
-	path := ctx.Path()
-
-	srvName := "/"
-	if strings.TrimSpace(serverName) != "" {
-		srvName += serverName
-	}
-
-	switch string(path) {
-	case srvName:
-		pageHandler(ctx)
-	case "/api" + srvName:
-		statsHandler(ctx)
-	}
-}
-
-func pageHandler(ctx *fasthttp.RequestCtx) {
-	tmpl, err := template.ParseFiles("stats.gohtml")
-	if err != nil {
-		log.Println("template.ParseFiles:", err)
-		return
-	}
-
-	playerStats, err := getStats()
-	if err != nil {
-		log.Println("getStats:", err)
-		return
-	}
-
-	top10 := struct {
-		Top10 []place
-	}{
-		Top10: playerStats,
-	}
-
-	ctx.SetContentType("text/html")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-
-	if err = tmpl.Execute(ctx, top10); err != nil {
-		log.Println("tmpl.Execute:", err)
-		return
-	}
-}
-
-func statsHandler(ctx *fasthttp.RequestCtx) {
-	playerStats, err := getStats()
-	if err != nil {
-		log.Println("getStats:", err)
-		return
-	}
-
-	marshal, err := json.Marshal(playerStats)
-	if err != nil {
-		return
-	}
-
-	ctx.SetContentType("application/json")
-	ctx.SetStatusCode(fasthttp.StatusOK)
-	ctx.SetBody(marshal)
-}
-
-func getStats() (stats []place, err error) {
-	var data []byte
-	_, data, err = fasthttp.Get(data, fmt.Sprint("https://cache.gametracker.com/components/html0/?host=", gameTrackerServerIp, "&topPlayersHeight=135&showTopPlayers=1"))
-	if err != nil {
-		return
-	}
-
-	dataS := string(data)
-	d := dataS[strings.Index(dataS, "<b>Top 10 Players:"):]
-
-	var z []string
-	for i := 0; ; i++ {
-		i = strings.Index(d, "https://www.gametracker.com/player/")
-
-		if i <= 0 {
-			break
-		}
-
-		z = append(z, d[i:])
-		d = d[i+1:]
-	}
-
-	for i, s := range z {
-		s = s[:strings.Index(s, "</div>\n\t\t\t<div class=\"item_float_clear")]
-
-		stat := place{}
-		stat.Position = i + 1
-		//stat.Stats.UserProfile = s[:strings.Index(s, `"`)]
-		stat.Stats.Name = strings.TrimSpace(s[strings.Index(s, `>`)+1 : strings.Index(s, `</a>`)])
-		stat.Stats.Score = strings.TrimSpace(s[strings.Index(s, `scrollable_on_c03">`)+19:])
-
-		// score := stat.Stats.Score
-		// if strings.Contains(score, "k") {
-		// 	parsedNumber, err := strconv.ParseFloat(score[:len(score)-1], 64)
-		// 	if err != nil {
-		// 		return nil, err
-		// 	}
-		// 	stat.Stats.Score = strconv.Itoa(int(parsedNumber * 1000))
-		// }
-
-		stats = append(stats, stat)
-	}
-
-	return
 }

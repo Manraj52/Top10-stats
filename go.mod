@@ -2,7 +2,10 @@ module main
 
 go 1.18
 
-require github.com/valyala/fasthttp v1.44.0
+require (
+	github.com/joho/godotenv v1.5.0
+	github.com/valyala/fasthttp v1.44.0
+)
 
 require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
